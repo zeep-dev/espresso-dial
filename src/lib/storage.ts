@@ -3,6 +3,7 @@ import { supabase } from "./supabase";
 // Collection identifiers (stored in the "collection_name" text column).
 export const HISTORY_KEY = "espresso-dial-history";
 export const BAGS_KEY = "espresso-dial-bags";
+export const PROFILE_KEY = "espresso-dial-equipment-profile";
 
 // Table holding each collection as a single JSON array row per user.
 // Columns: id (bigint, generated), user_id (uuid), collection_name (text), data (jsonb)

@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabase";
 import { loadCollection, saveCollection, HISTORY_KEY, BAGS_KEY } from "./lib/storage";
 import AuthScreen from "./components/AuthScreen";
+import { OnboardingModal } from "./components/OnboardingModal";
+import { ProfilePage } from "./components/ProfilePage";
+import { loadEquipmentProfile, saveEquipmentProfile } from "./lib/equipment";
 
 const GENERIC_DEFAULTS = {
   washed: { light: { niche: 14, dose: 18, yield: 36, time: 28 }, medium: { niche: 11, dose: 18, yield: 36, time: 27 }, dark: { niche: 8, dose: 18, yield: 36, time: 26 } },
@@ -182,6 +185,43 @@ const styles = `
   .tag { display: inline-block; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 3px; background: rgba(255,255,255,0.06); color: var(--cream-muted); margin-right: 4px; margin-top: 4px; }
   .tag-accent { background: rgba(193,127,58,0.12); color: var(--accent); }
   .section-label { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--cream-muted); margin-bottom: 16px; }
+
+  /* --- Equipment profile --- */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(8,6,5,0.82); display: flex; align-items: flex-start; justify-content: center; padding: 32px 20px; overflow-y: auto; z-index: 50; }
+  .modal { background: var(--surface); border: 1px solid var(--border-light); border-radius: 10px; padding: 32px; width: 100%; max-width: 860px; margin: auto; }
+  .modal-head { text-align: center; margin-bottom: 28px; }
+  .modal-head h1 { font-family: var(--font-serif); font-size: 1.6rem; font-weight: 400; color: var(--cream); }
+  .modal-head h1 em { font-style: italic; color: var(--accent); }
+  .modal-head p { font-size: 0.8rem; color: var(--cream-muted); margin-top: 8px; line-height: 1.5; max-width: 420px; margin-left: auto; margin-right: auto; }
+  .modal-foot { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 4px; }
+  .equip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; align-items: start; }
+  @media (max-width: 720px) { .equip-grid { grid-template-columns: 1fr; } .modal { padding: 24px 20px; } }
+  .equip-card { margin-bottom: 0; }
+  .equip-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+  .equip-card-head .section-label { margin-bottom: 4px; }
+  .equip-name { font-family: var(--font-serif); font-size: 1.15rem; font-weight: 400; color: var(--cream); }
+  .equip-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .equip-actions .btn { padding: 6px 10px; font-size: 0.66rem; }
+  .equip-status { margin-top: 4px; }
+  .equip-hint { font-size: 0.72rem; color: var(--cream-muted); line-height: 1.5; }
+  .upload-zone.dragging { border-color: var(--accent); background: rgba(193,127,58,0.08); }
+  .upload-zone .icon { color: var(--cream-muted); display: flex; justify-content: center; }
+  .photo-preview { display: block; width: 100%; max-height: 130px; object-fit: cover; border-radius: 4px; }
+  .photo-remove { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(8,6,5,0.8); color: var(--cream); cursor: pointer; font-size: 0.9rem; line-height: 1; }
+  .photo-remove:hover { background: var(--red); }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.68rem; padding: 5px 10px; border-radius: 20px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--cream); text-align: left; }
+  .badge-label { font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cream-muted); }
+  .badge-editable, .badge-toggle { cursor: pointer; transition: border-color 0.15s; }
+  .badge-editable:hover, .badge-toggle:hover { border-color: var(--accent); }
+  .badge-toggle.badge-on { background: rgba(193,127,58,0.14); border-color: var(--accent-dim); }
+  .badge-toggle.badge-on .badge-value { color: var(--accent); }
+  .badge-editing { border-color: var(--accent); }
+  .badge-input { background: var(--surface); border: none; border-bottom: 1px solid var(--accent); color: var(--cream); font-family: var(--font-mono); font-size: 0.68rem; padding: 1px 2px; max-width: 150px; }
+  .badge-input:focus { outline: none; }
+  .link-btn { background: none; border: none; color: var(--cream-muted); font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; text-decoration: underline; padding: 4px; }
+  .link-btn:hover { color: var(--cream); }
+  .link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 `;
 
 export default function App() {
@@ -190,6 +230,8 @@ export default function App() {
   const [tab, setTab] = useState("dial");
   const [history, setHistory] = useState([]);
   const [bags, setBags] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -203,12 +245,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) { setHistory([]); setBags([]); return; }
+    if (!session) { setHistory([]); setBags([]); setProfile(null); setShowOnboarding(false); return; }
     (async () => {
       setHistory(await loadCollection(HISTORY_KEY));
       setBags(await loadCollection(BAGS_KEY));
+      // Equipment profile check: on first login there is no profile yet, so the
+      // onboarding modal is shown over the app until the user saves or skips.
+      const saved = await loadEquipmentProfile();
+      setProfile(saved);
+      setShowOnboarding(!saved);
     })();
   }, [session]);
+
+  const saveProfile = async (next) => {
+    setProfile(next);
+    await saveEquipmentProfile(next);
+    setShowOnboarding(false);
+  };
 
   const saveHistory = async (newHistory) => {
     setHistory(newHistory);
@@ -272,12 +325,17 @@ export default function App() {
           <button className={`tab ${tab === "log" ? "active" : ""}`} onClick={() => setTab("log")}>Log Shot</button>
           <button className={`tab ${tab === "shots" ? "active" : ""}`} onClick={() => setTab("shots")}>Shots ({history.length})</button>
           <button className={`tab ${tab === "bags" ? "active" : ""}`} onClick={() => setTab("bags")}>Bags ({bags.length})</button>
+          <button className={`tab ${tab === "kit" ? "active" : ""}`} onClick={() => setTab("kit")}>Kit</button>
         </div>
         {tab === "dial" && <DialTab history={history} onBagScanned={saveBag} />}
         {tab === "log" && <LogTab onSave={addEntry} bags={bags} onUpdateBag={updateBag} history={history} />}
         {tab === "shots" && <HistoryTab history={history} />}
         {tab === "bags" && <BagsTab bags={bags} history={history} />}
+        {tab === "kit" && <ProfilePage profile={profile} onSave={saveProfile} />}
       </div>
+      {showOnboarding && (
+        <OnboardingModal onSave={saveProfile} onSkip={() => setShowOnboarding(false)} />
+      )}
     </>
   );
 }
