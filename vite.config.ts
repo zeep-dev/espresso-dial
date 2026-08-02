@@ -46,6 +46,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [react(), devApiPlugin(env)],
+    // Allow the hosted sandbox/preview domains to reach the dev server.
+    server: { allowedHosts: ['.vercel.run', '.vusercontent.net'] },
     // Expose both VITE_* vars and the SUPABASE_ANON_KEY var to client code.
     envPrefix: ['VITE_', 'SUPABASE_ANON_KEY'],
   }
