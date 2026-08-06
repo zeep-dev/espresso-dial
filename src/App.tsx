@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { supabase } from "./lib/supabase";
 import { loadCollection, saveCollection, HISTORY_KEY, BAGS_KEY } from "./lib/storage";
 import AuthScreen from "./components/AuthScreen";
@@ -292,6 +293,7 @@ export default function App() {
         <div className="app">
           <div className="status"><div className="spinner" />Loading…</div>
         </div>
+        <Analytics />
       </>
     );
   }
@@ -301,6 +303,7 @@ export default function App() {
       <>
         <style>{styles}</style>
         <AuthScreen />
+        <Analytics />
       </>
     );
   }
@@ -336,6 +339,7 @@ export default function App() {
       {showOnboarding && (
         <OnboardingModal onSave={saveProfile} onSkip={() => setShowOnboarding(false)} />
       )}
+      <Analytics />
     </>
   );
 }
